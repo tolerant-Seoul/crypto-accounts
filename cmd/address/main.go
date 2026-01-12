@@ -289,6 +289,8 @@ func chainToCoinTypeEd25519(chainID address.ChainID) uint32 {
 		return 637
 	case address.ChainSui:
 		return 784
+	case address.ChainCardano:
+		return 1815
 	default:
 		return 0
 	}
@@ -381,7 +383,7 @@ func decompressPublicKey(compressed []byte) ([]byte, error) {
 func isEd25519Chain(chainID address.ChainID) bool {
 	switch chainID {
 	case address.ChainSolana, address.ChainStellar, address.ChainAlgorand,
-		address.ChainNEAR, address.ChainAptos, address.ChainSui:
+		address.ChainNEAR, address.ChainAptos, address.ChainSui, address.ChainCardano:
 		return true
 	default:
 		return false

@@ -54,6 +54,7 @@ func (f *Factory) registerDefaults() {
 	f.Register(ChainStellar, NewStellarAddress())
 	f.Register(ChainAlgorand, NewAlgorandAddress())
 	f.Register(ChainNEAR, NewNEARAddress())
+	f.Register(ChainCardano, NewCardanoAddress())
 
 	// Polkadot-family (SS58)
 	f.Register(ChainPolkadot, NewPolkadotAddress())
@@ -159,7 +160,7 @@ func GetChainInfo(chainID ChainID) *ChainInfo {
 func ListAllChainInfo() []*ChainInfo {
 	chains := []ChainID{
 		ChainBitcoin, ChainEthereum, ChainLitecoin, ChainDogecoin, ChainRipple,
-		ChainStellar, ChainPolkadot, ChainSolana, ChainAvalanche, ChainCosmos,
+		ChainStellar, ChainCardano, ChainPolkadot, ChainSolana, ChainAvalanche, ChainCosmos,
 		ChainTron, ChainBitcoinCash, ChainBSC, ChainPolygon, ChainFantom,
 		ChainOptimism, ChainArbitrum, ChainVeChain, ChainTheta, ChainBinanceBEP2,
 		ChainNEAR, ChainAlgorand, ChainAptos, ChainSui, ChainSei, ChainEthereumClassic,

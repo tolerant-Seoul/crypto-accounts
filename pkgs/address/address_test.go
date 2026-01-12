@@ -387,6 +387,53 @@ func TestNEARAddress(t *testing.T) {
 	}
 }
 
+func TestCardanoAddress(t *testing.T) {
+	ada := NewCardanoAddress()
+
+	// 32-byte Ed25519 public key
+	pubKeyHex := "0000000000000000000000000000000000000000000000000000000000000001"
+	pubKey, _ := hex.DecodeString(pubKeyHex)
+
+	addr, err := ada.Generate(pubKey)
+	if err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	// Cardano mainnet addresses start with "addr1"
+	if len(addr) < 5 || addr[:4] != "addr" {
+		t.Errorf("Address should start with 'addr', got %s", addr[:10])
+	}
+
+	if !ada.Validate(addr) {
+		t.Error("Address validation failed")
+	}
+
+	// Test enterprise address type
+	addrType, err := ada.GetAddressType(addr)
+	if err != nil {
+		t.Fatalf("GetAddressType() error = %v", err)
+	}
+	if addrType != "enterprise (key)" {
+		t.Errorf("Expected enterprise address type, got %s", addrType)
+	}
+
+	// Test testnet address
+	adaTestnet := NewCardanoTestnetAddress()
+	testnetAddr, err := adaTestnet.Generate(pubKey)
+	if err != nil {
+		t.Fatalf("Generate() testnet error = %v", err)
+	}
+
+	// Testnet addresses have "addr_test" prefix
+	if len(testnetAddr) < 9 || testnetAddr[:9] != "addr_test" {
+		t.Errorf("Testnet address should start with 'addr_test', got %s", testnetAddr[:15])
+	}
+
+	if !adaTestnet.Validate(testnetAddr) {
+		t.Error("Testnet address validation failed")
+	}
+}
+
 func TestBitcoinCashAddress(t *testing.T) {
 	bch := NewBitcoinCashAddress(false)
 
