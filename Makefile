@@ -1,0 +1,69 @@
+.PHONY: all build clean test lint help
+
+# Binary output directory
+BIN_DIR := bin
+
+# Go parameters
+GOCMD := go
+GOBUILD := $(GOCMD) build
+GOTEST := $(GOCMD) test
+GOCLEAN := $(GOCMD) clean
+GOMOD := $(GOCMD) mod
+
+# Build targets
+BIP32_CMD := ./cmd/bip32
+BIP32_BIN := $(BIN_DIR)/bip32
+
+# Default target
+all: build
+
+## build: Build all CLI tools
+build: build-bip32
+
+## build-bip32: Build BIP-32 CLI tool
+build-bip32:
+	@echo "Building bip32..."
+	@mkdir -p $(BIN_DIR)
+	$(GOBUILD) -o $(BIP32_BIN) $(BIP32_CMD)
+	@echo "Built: $(BIP32_BIN)"
+
+## clean: Remove build artifacts
+clean:
+	@echo "Cleaning..."
+	@rm -rf $(BIN_DIR)
+	$(GOCLEAN)
+	@echo "Clean complete"
+
+## test: Run all tests
+test:
+	@echo "Running tests..."
+	$(GOTEST) -v ./...
+
+## test-coverage: Run tests with coverage
+test-coverage:
+	@echo "Running tests with coverage..."
+	$(GOTEST) -v -cover ./...
+
+## test-coverage-html: Generate HTML coverage report
+test-coverage-html:
+	@echo "Generating coverage report..."
+	$(GOTEST) -coverprofile=coverage.out ./...
+	$(GOCMD) tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report: coverage.html"
+
+## lint: Run go vet
+lint:
+	@echo "Running linter..."
+	$(GOCMD) vet ./...
+
+## tidy: Tidy go modules
+tidy:
+	@echo "Tidying modules..."
+	$(GOMOD) tidy
+
+## help: Show this help message
+help:
+	@echo "Usage: make [target]"
+	@echo ""
+	@echo "Targets:"
+	@grep -E '^## ' $(MAKEFILE_LIST) | sed 's/## /  /'
