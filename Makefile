@@ -17,12 +17,14 @@ BIP39_CMD := ./cmd/bip39
 BIP39_BIN := $(BIN_DIR)/bip39
 BIP44_CMD := ./cmd/bip44
 BIP44_BIN := $(BIN_DIR)/bip44
+ADDRESS_CMD := ./cmd/address
+ADDRESS_BIN := $(BIN_DIR)/address
 
 # Default target
 all: build
 
 ## build: Build all CLI tools
-build: build-bip32 build-bip39 build-bip44
+build: build-bip32 build-bip39 build-bip44 build-address
 
 ## build-bip32: Build BIP-32 CLI tool
 build-bip32:
@@ -44,6 +46,13 @@ build-bip44:
 	@mkdir -p $(BIN_DIR)
 	$(GOBUILD) -o $(BIP44_BIN) $(BIP44_CMD)
 	@echo "Built: $(BIP44_BIN)"
+
+## build-address: Build address CLI tool
+build-address:
+	@echo "Building address..."
+	@mkdir -p $(BIN_DIR)
+	$(GOBUILD) -o $(ADDRESS_BIN) $(ADDRESS_CMD)
+	@echo "Built: $(ADDRESS_BIN)"
 
 ## clean: Remove build artifacts
 clean:
