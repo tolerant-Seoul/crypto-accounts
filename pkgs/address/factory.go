@@ -62,6 +62,19 @@ func (f *Factory) registerDefaults() {
 	// New generation chains
 	f.Register(ChainAptos, NewAptosAddress())
 	f.Register(ChainSui, NewSuiAddress())
+
+	// Other chains
+	f.Register(ChainTezos, NewTezosAddress())
+	f.Register(ChainZcash, NewZcashAddress())
+	f.Register(ChainKaspa, NewKaspaAddress())
+	f.Register(ChainStacks, NewStacksAddress())
+	f.Register(ChainFilecoin, NewFilecoinAddress())
+	f.Register(ChainHedera, NewHederaAddress())
+	f.Register(ChainICP, NewICPAddress())
+	f.Register(ChainEOS, NewEOSAddress())
+	f.Register(ChainFlow, NewFlowAddress())
+	f.Register(ChainArweave, NewArweaveAddress())
+	f.Register(ChainMonero, NewMoneroAddress())
 }
 
 // Register adds a new address generator to the factory
@@ -147,6 +160,14 @@ func GetChainInfo(chainID ChainID) *ChainInfo {
 		ChainSui:             {ChainSui, "Sui", "SUI", "Hex", "0x-prefixed, 64 hex chars"},
 		ChainSei:             {ChainSei, "Sei", "SEI", "Bech32/Ethereum", "Dual address system"},
 		ChainEthereumClassic: {ChainEthereumClassic, "Ethereum Classic", "ETC", "Keccak256", "Same as Ethereum"},
+		ChainKaspa:           {ChainKaspa, "Kaspa", "KAS", "Bech32", "Starts with 'kaspa:'"},
+		ChainStacks:          {ChainStacks, "Stacks", "STX", "c32check", "Starts with 'S'"},
+		ChainFilecoin:        {ChainFilecoin, "Filecoin", "FIL", "Base32", "f1 addresses (secp256k1)"},
+		ChainHedera:          {ChainHedera, "Hedera", "HBAR", "Account ID", "shard.realm.num format"},
+		ChainICP:             {ChainICP, "Internet Computer", "ICP", "Principal ID", "Base32 with CRC32"},
+		ChainEOS:             {ChainEOS, "EOS", "EOS", "Base58/Name", "12-char account names"},
+		ChainFlow:            {ChainFlow, "Flow", "FLOW", "Hex", "0x-prefixed, 16 hex chars"},
+		ChainArweave:         {ChainArweave, "Arweave", "AR", "Base64URL", "43 characters (SHA-256)"},
 	}
 
 	info, ok := chainInfoMap[chainID]
@@ -164,6 +185,8 @@ func ListAllChainInfo() []*ChainInfo {
 		ChainTron, ChainBitcoinCash, ChainBSC, ChainPolygon, ChainFantom,
 		ChainOptimism, ChainArbitrum, ChainVeChain, ChainTheta, ChainBinanceBEP2,
 		ChainNEAR, ChainAlgorand, ChainAptos, ChainSui, ChainSei, ChainEthereumClassic,
+		ChainTezos, ChainZcash, ChainKaspa, ChainStacks, ChainFilecoin,
+		ChainHedera, ChainICP, ChainEOS, ChainFlow, ChainArweave, ChainMonero,
 	}
 
 	infos := make([]*ChainInfo, 0, len(chains))
