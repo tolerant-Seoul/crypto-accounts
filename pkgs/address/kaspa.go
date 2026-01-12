@@ -87,9 +87,9 @@ func (k *KaspaAddress) getPrefix() string {
 
 // Validate checks if a Kaspa address is valid
 func (k *KaspaAddress) Validate(address string) bool {
-	// Check prefix
+	// Check prefix (Bech32 uses "1" as separator)
 	prefix := k.getPrefix()
-	if !strings.HasPrefix(address, prefix+":") {
+	if !strings.HasPrefix(address, prefix+"1") {
 		return false
 	}
 
