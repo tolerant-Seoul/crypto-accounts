@@ -13,12 +13,14 @@ GOMOD := $(GOCMD) mod
 # Build targets
 BIP32_CMD := ./cmd/bip32
 BIP32_BIN := $(BIN_DIR)/bip32
+BIP39_CMD := ./cmd/bip39
+BIP39_BIN := $(BIN_DIR)/bip39
 
 # Default target
 all: build
 
 ## build: Build all CLI tools
-build: build-bip32
+build: build-bip32 build-bip39
 
 ## build-bip32: Build BIP-32 CLI tool
 build-bip32:
@@ -26,6 +28,13 @@ build-bip32:
 	@mkdir -p $(BIN_DIR)
 	$(GOBUILD) -o $(BIP32_BIN) $(BIP32_CMD)
 	@echo "Built: $(BIP32_BIN)"
+
+## build-bip39: Build BIP-39 CLI tool
+build-bip39:
+	@echo "Building bip39..."
+	@mkdir -p $(BIN_DIR)
+	$(GOBUILD) -o $(BIP39_BIN) $(BIP39_CMD)
+	@echo "Built: $(BIP39_BIN)"
 
 ## clean: Remove build artifacts
 clean:
