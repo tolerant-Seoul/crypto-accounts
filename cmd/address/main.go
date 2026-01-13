@@ -13,6 +13,7 @@ import (
 	"github.com/study/crypto-accounts/pkgs/bip39"
 	"github.com/study/crypto-accounts/pkgs/bip44"
 	"github.com/study/crypto-accounts/pkgs/crypto/ed25519"
+	"github.com/study/crypto-accounts/pkgs/crypto/rsa"
 	"github.com/study/crypto-accounts/pkgs/crypto/secp256k1"
 )
 
@@ -36,6 +37,12 @@ Examples:
 
   # Generate addresses from mnemonic
   address generate --chain eth --mnemonic "abandon abandon ... about" --count 5
+
+  # Generate Arweave address with new RSA key
+  address generate --chain ar --generate-rsa
+
+  # Generate Arweave address from JWK file
+  address generate --chain ar --jwk wallet.json
 
   # Validate an address
   address validate --chain btc --address 1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2
@@ -81,6 +88,10 @@ func cmdGenerate(args []string) {
 	account := fs.Uint("account", 0, "BIP-44 account index")
 	count := fs.Uint("count", 1, "Number of addresses to generate")
 	format := fs.String("format", "", "Address format (e.g., p2pkh, p2sh, bech32 for Bitcoin)")
+	// RSA options for Arweave
+	generateRSA := fs.Bool("generate-rsa", false, "Generate new RSA key (for Arweave)")
+	jwkFile := fs.String("jwk", "", "Path to JWK file (for Arweave)")
+	saveJWK := fs.String("save-jwk", "", "Save generated RSA key to JWK file")
 	fs.Parse(args)
 
 	if *chain == "" {
@@ -89,6 +100,26 @@ func cmdGenerate(args []string) {
 	}
 
 	chainID := address.ChainID(strings.ToLower(*chain))
+
+	// RSA key generation for Arweave
+	if *generateRSA {
+		if chainID != address.ChainArweave {
+			fmt.Println("Error: --generate-rsa is only supported for Arweave (ar)")
+			os.Exit(1)
+		}
+		generateArweaveWithNewRSA(*saveJWK)
+		return
+	}
+
+	// Generate from JWK file (for Arweave)
+	if *jwkFile != "" {
+		if chainID != address.ChainArweave {
+			fmt.Println("Error: --jwk is only supported for Arweave (ar)")
+			os.Exit(1)
+		}
+		generateArweaveFromJWK(*jwkFile)
+		return
+	}
 
 	// Generate from private key (recommended)
 	if *privkey != "" {
@@ -106,6 +137,14 @@ func cmdGenerate(args []string) {
 	if *pubkey != "" {
 		generateFromPubkey(chainID, *pubkey, *format)
 		return
+	}
+
+	// Special message for Arweave
+	if chainID == address.ChainArweave {
+		fmt.Println("Error: Arweave requires RSA keys. Use --generate-rsa or --jwk")
+		fmt.Println("  Example: address generate --chain ar --generate-rsa")
+		fmt.Println("  Example: address generate --chain ar --jwk wallet.json")
+		os.Exit(1)
 	}
 
 	fmt.Println("Error: --privkey, --mnemonic, or --pubkey is required")
@@ -480,8 +519,11 @@ func generateFromPrivkeySecp256k1(chainID address.ChainID, privkey []byte, forma
 		return
 	}
 
-	// EVM chains need uncompressed public key (without 0x04 prefix for Keccak256)
+	// Handle special chain cases
 	var pubkey []byte
+	var addr string
+	var err error
+
 	switch chainID {
 	case address.ChainEthereum, address.ChainBSC, address.ChainPolygon,
 		address.ChainFantom, address.ChainOptimism, address.ChainArbitrum,
@@ -489,12 +531,39 @@ func generateFromPrivkeySecp256k1(chainID address.ChainID, privkey []byte, forma
 		address.ChainTron:
 		// Use uncompressed public key for EVM/TRON chains
 		pubkey = uncompressedPubkey
+		addr, err = address.Generate(chainID, pubkey)
+
+	case address.ChainTezos:
+		// Tezos with secp256k1 generates tz2 address
+		tezos := address.NewTezosAddressWithKeyType(address.TezosKeySecp256k1)
+		addr, err = tezos.GenerateTz2(compressedPubkey)
+		pubkey = compressedPubkey
+
+	case address.ChainFilecoin:
+		// Filecoin uses 65-byte uncompressed public key (0x04 + x + y)
+		// uncompressedPubkey from secp256k1.SerializeUncompressed already includes 0x04 prefix
+		pubkey = uncompressedPubkey
+		addr, err = address.Generate(chainID, pubkey)
+
+	case address.ChainMonero:
+		// Monero requires dual keys (spend + view), show warning
+		fmt.Println("Note: Monero requires both spend and view public keys (64 bytes total).")
+		fmt.Println("      Use --pubkey with 64-byte hex (spend_key || view_key) for proper address generation.")
+		fmt.Println("      Generating placeholder address with single key for demonstration:")
+		// Generate a placeholder address using the key twice
+		dualKey := append(compressedPubkey[:32], compressedPubkey[:32]...)
+		if len(dualKey) < 64 {
+			dualKey = append(dualKey, make([]byte, 64-len(dualKey))...)
+		}
+		pubkey = dualKey[:64]
+		addr, err = address.Generate(chainID, pubkey)
+
 	default:
 		// Most chains use compressed public key
 		pubkey = compressedPubkey
+		addr, err = address.Generate(chainID, pubkey)
 	}
 
-	addr, err := address.Generate(chainID, pubkey)
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
@@ -529,4 +598,108 @@ func chainToCoinType(chainID address.ChainID) bip44.CoinType {
 		return coinType
 	}
 	return 0
+}
+
+// generateArweaveWithNewRSA generates a new RSA key and creates an Arweave address
+func generateArweaveWithNewRSA(saveJWKPath string) {
+	fmt.Println("Generating new 4096-bit RSA key for Arweave...")
+	fmt.Println("(This may take a few seconds)")
+	fmt.Println()
+
+	// Generate new RSA key
+	key, err := rsa.GenerateArweaveKey()
+	if err != nil {
+		fmt.Printf("Error generating RSA key: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Get key info
+	info := rsa.GetKeyInfo(&key.PublicKey)
+	fmt.Printf("RSA Key Size: %d bits\n", info.BitSize)
+	fmt.Printf("Public Exponent: %d\n", info.Exponent)
+	fmt.Println()
+
+	// Generate address from modulus
+	modulus := rsa.GetModulus(&key.PublicKey)
+	addr, err := address.Generate(address.ChainArweave, modulus)
+	if err != nil {
+		fmt.Printf("Error generating address: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Arweave Address: %s\n", addr)
+	fmt.Println()
+
+	// Get owner (Base64URL encoded modulus)
+	owner := rsa.GetArweaveOwner(&key.PublicKey)
+	fmt.Printf("Owner (for transactions): %s...\n", owner[:64])
+	fmt.Println()
+
+	// Convert to JWK
+	jwk := rsa.PrivateKeyToJWK(key)
+	jwkJSON, err := jwk.ToJSON()
+	if err != nil {
+		fmt.Printf("Error converting to JWK: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Save or display JWK
+	if saveJWKPath != "" {
+		err = os.WriteFile(saveJWKPath, []byte(jwkJSON), 0600)
+		if err != nil {
+			fmt.Printf("Error saving JWK file: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("JWK saved to: %s\n", saveJWKPath)
+		fmt.Println()
+		fmt.Println("WARNING: Keep this file secure! It contains your private key.")
+	} else {
+		fmt.Println("JWK (save this to a file for wallet recovery):")
+		fmt.Println("WARNING: This contains your private key - keep it secure!")
+		fmt.Println()
+		fmt.Println(jwkJSON)
+	}
+}
+
+// generateArweaveFromJWK generates an Arweave address from a JWK file
+func generateArweaveFromJWK(jwkPath string) {
+	// Read JWK file
+	data, err := os.ReadFile(jwkPath)
+	if err != nil {
+		fmt.Printf("Error reading JWK file: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Parse JWK
+	key, err := rsa.PrivateKeyFromJWKJSON(string(data))
+	if err != nil {
+		fmt.Printf("Error parsing JWK: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Get key info
+	info := rsa.GetKeyInfo(&key.PublicKey)
+	fmt.Printf("RSA Key Size: %d bits\n", info.BitSize)
+	fmt.Printf("Public Exponent: %d\n", info.Exponent)
+	fmt.Println()
+
+	// Validate key size
+	if err := rsa.ValidateKeySize(&key.PublicKey); err != nil {
+		fmt.Printf("Warning: %v\n", err)
+	}
+
+	// Generate address from modulus
+	modulus := rsa.GetModulus(&key.PublicKey)
+	addr, err := address.Generate(address.ChainArweave, modulus)
+	if err != nil {
+		fmt.Printf("Error generating address: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Arweave Address: %s\n", addr)
+	fmt.Println()
+
+	// Get owner (Base64URL encoded modulus)
+	owner := rsa.GetArweaveOwner(&key.PublicKey)
+	fmt.Printf("Owner (for transactions): %s...\n", owner[:64])
 }
