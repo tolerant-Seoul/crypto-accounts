@@ -1,0 +1,32 @@
+[package]
+name = "crypto-lib"
+version = "0.1.0"
+edition = "2021"
+description = "Blockchain account generation library for learning cryptography"
+
+[dependencies]
+# 랜덤 생성
+rand = "0.8"
+
+# 해시 함수
+sha2 = "0.10"           # SHA-256, SHA-512
+ripemd = "0.1"          # RIPEMD-160 (Bitcoin)
+tiny-keccak = { version = "2.0", features = ["keccak"] }  # Keccak-256 (EVM)
+blake2 = "0.10"         # Blake2b (Sui)
+
+# HMAC, PBKDF2 (BIP-39, BIP-32)
+hmac = "0.12"
+pbkdf2 = { version = "0.12", features = ["simple"] }
+
+# 타원곡선
+secp256k1 = { version = "0.29", features = ["rand-std"] }  # Bitcoin, EVM, Cosmos
+ed25519-dalek = { version = "2.1", features = ["rand_core"] }  # Solana, Sui
+
+# 인코딩
+hex = "0.4"
+bs58 = "0.5"            # Base58 (Bitcoin, Solana)
+bech32 = "0.11"         # Bech32 (Bitcoin SegWit, Cosmos)
+
+[dev-dependencies]
+# 테스트용 - 결과 검증
+bip39 = "2.0"           # 니모닉 검증용
