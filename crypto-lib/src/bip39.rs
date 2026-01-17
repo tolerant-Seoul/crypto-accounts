@@ -9,7 +9,6 @@
 //! 4. PBKDF2로 시드 생성
 
 use sha2::{Sha256, Sha512, Digest};
-use hmac::Hmac;
 use pbkdf2::pbkdf2_hmac;
 use rand::RngCore;
 
