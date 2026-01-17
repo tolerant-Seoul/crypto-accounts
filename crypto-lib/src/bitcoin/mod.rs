@@ -21,6 +21,7 @@ use secp256k1::{Secp256k1, SecretKey, PublicKey};
 
 use crate::bip32::{master_key_from_seed, ExtendedPrivateKey};
 use crate::bip39::mnemonic_to_seed;
+use crate::utils::bech32::encode_bech32;
 
 /// Bitcoin 계정
 #[derive(Debug, Clone)]
@@ -99,7 +100,7 @@ impl BitcoinAccount {
             Network::Mainnet => "bc",
             Network::Testnet => "tb",
         };
-        encode_bech32(hrp, 0, &self.pubkey_hash)
+        encode_bech32(hrp, Some(0), &self.pubkey_hash)
     }
 
     /// Legacy 주소 (1...) - Base58Check
@@ -193,93 +194,6 @@ fn encode_base58check(version: u8, payload: &[u8]) -> String {
     bs58::encode(data).into_string()
 }
 
-/// Bech32 인코딩 (SegWit 주소용)
-///
-/// ## 구조
-/// hrp + "1" + data (5비트 변환) + checksum (6문자)
-fn encode_bech32(hrp: &str, witness_version: u8, data: &[u8]) -> String {
-    // 8비트 → 5비트 변환
-    let mut bits: Vec<u8> = vec![witness_version];
-    bits.extend(convert_bits(data, 8, 5, true));
-
-    // Bech32 체크섬 계산
-    let checksum = bech32_checksum(hrp, &bits);
-    bits.extend(checksum);
-
-    // 문자로 변환
-    let charset = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
-    let encoded: String = bits
-        .iter()
-        .map(|&b| charset.chars().nth(b as usize).unwrap())
-        .collect();
-
-    format!("{}1{}", hrp, encoded)
-}
-
-/// 비트 변환 (8비트 ↔ 5비트)
-fn convert_bits(data: &[u8], from_bits: u32, to_bits: u32, pad: bool) -> Vec<u8> {
-    let mut acc: u32 = 0;
-    let mut bits: u32 = 0;
-    let mut result = Vec::new();
-    let max_v = (1u32 << to_bits) - 1;
-
-    for &value in data {
-        acc = (acc << from_bits) | (value as u32);
-        bits += from_bits;
-
-        while bits >= to_bits {
-            bits -= to_bits;
-            result.push(((acc >> bits) & max_v) as u8);
-        }
-    }
-
-    if pad && bits > 0 {
-        result.push(((acc << (to_bits - bits)) & max_v) as u8);
-    }
-
-    result
-}
-
-/// Bech32 체크섬 계산
-fn bech32_checksum(hrp: &str, data: &[u8]) -> Vec<u8> {
-    let mut values = bech32_hrp_expand(hrp);
-    values.extend(data);
-    values.extend(vec![0u8; 6]);
-
-    let polymod = bech32_polymod(&values) ^ 1;
-
-    (0..6)
-        .map(|i| ((polymod >> (5 * (5 - i))) & 31) as u8)
-        .collect()
-}
-
-/// HRP 확장 (Bech32)
-fn bech32_hrp_expand(hrp: &str) -> Vec<u8> {
-    let mut result: Vec<u8> = hrp.chars().map(|c| (c as u8) >> 5).collect();
-    result.push(0);
-    result.extend(hrp.chars().map(|c| (c as u8) & 31));
-    result
-}
-
-/// Bech32 다항식 모듈러 연산
-fn bech32_polymod(values: &[u8]) -> u32 {
-    let generator = [0x3b6a57b2u32, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
-    let mut chk: u32 = 1;
-
-    for &value in values {
-        let top = chk >> 25;
-        chk = ((chk & 0x1ffffff) << 5) ^ (value as u32);
-
-        for (i, &gen) in generator.iter().enumerate() {
-            if (top >> i) & 1 == 1 {
-                chk ^= gen;
-            }
-        }
-    }
-
-    chk
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -335,7 +249,7 @@ mod tests {
     fn test_bech32() {
         // HASH160 → SegWit 주소
         let pubkey_hash = hex::decode("751e76e8199196d454941c45d1b3a323f1433bd6").unwrap();
-        let address = encode_bech32("bc", 0, &pubkey_hash);
+        let address = encode_bech32("bc", Some(0), &pubkey_hash);
 
         // 예상값: bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4
         assert_eq!(address, "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4");

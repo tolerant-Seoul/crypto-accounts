@@ -25,6 +25,7 @@ use secp256k1::{Secp256k1, SecretKey, PublicKey};
 
 use crate::bip32::{master_key_from_seed, ExtendedPrivateKey};
 use crate::bip39::mnemonic_to_seed;
+use crate::utils::bech32::encode_bech32;
 
 /// Cosmos 계정
 #[derive(Debug, Clone)]
@@ -144,7 +145,7 @@ impl CosmosAccount {
 
     /// 특정 체인의 주소 반환 (Bech32)
     pub fn address_for_chain(&self, chain: CosmosChain) -> String {
-        encode_bech32(chain.hrp(), &self.pubkey_hash)
+        encode_bech32(chain.hrp(), None, &self.pubkey_hash)
     }
 
     /// Cosmos Hub 주소 반환 (cosmos1...)
@@ -154,7 +155,7 @@ impl CosmosAccount {
 
     /// 커스텀 HRP로 주소 반환
     pub fn address_with_hrp(&self, hrp: &str) -> String {
-        encode_bech32(hrp, &self.pubkey_hash)
+        encode_bech32(hrp, None, &self.pubkey_hash)
     }
 
     /// 개인키를 hex 문자열로 반환
@@ -193,93 +194,6 @@ fn hash160(data: &[u8]) -> [u8; 20] {
     let mut result = [0u8; 20];
     result.copy_from_slice(&ripemd_hash);
     result
-}
-
-/// Bech32 인코딩 (Cosmos 주소용)
-///
-/// Bitcoin SegWit과 달리 witness version이 없음
-fn encode_bech32(hrp: &str, data: &[u8]) -> String {
-    // 8비트 → 5비트 변환
-    let bits = convert_bits(data, 8, 5, true);
-
-    // Bech32 체크섬 계산
-    let checksum = bech32_checksum(hrp, &bits);
-
-    let mut all_bits = bits;
-    all_bits.extend(checksum);
-
-    // 문자로 변환
-    let charset = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
-    let encoded: String = all_bits
-        .iter()
-        .map(|&b| charset.chars().nth(b as usize).unwrap())
-        .collect();
-
-    format!("{}1{}", hrp, encoded)
-}
-
-/// 비트 변환 (8비트 → 5비트)
-fn convert_bits(data: &[u8], from_bits: u32, to_bits: u32, pad: bool) -> Vec<u8> {
-    let mut acc: u32 = 0;
-    let mut bits: u32 = 0;
-    let mut result = Vec::new();
-    let max_v = (1u32 << to_bits) - 1;
-
-    for &value in data {
-        acc = (acc << from_bits) | (value as u32);
-        bits += from_bits;
-
-        while bits >= to_bits {
-            bits -= to_bits;
-            result.push(((acc >> bits) & max_v) as u8);
-        }
-    }
-
-    if pad && bits > 0 {
-        result.push(((acc << (to_bits - bits)) & max_v) as u8);
-    }
-
-    result
-}
-
-/// Bech32 체크섬 계산
-fn bech32_checksum(hrp: &str, data: &[u8]) -> Vec<u8> {
-    let mut values = bech32_hrp_expand(hrp);
-    values.extend(data);
-    values.extend(vec![0u8; 6]);
-
-    let polymod = bech32_polymod(&values) ^ 1;
-
-    (0..6)
-        .map(|i| ((polymod >> (5 * (5 - i))) & 31) as u8)
-        .collect()
-}
-
-/// HRP 확장 (Bech32)
-fn bech32_hrp_expand(hrp: &str) -> Vec<u8> {
-    let mut result: Vec<u8> = hrp.chars().map(|c| (c as u8) >> 5).collect();
-    result.push(0);
-    result.extend(hrp.chars().map(|c| (c as u8) & 31));
-    result
-}
-
-/// Bech32 다항식 모듈러 연산
-fn bech32_polymod(values: &[u8]) -> u32 {
-    let generator = [0x3b6a57b2u32, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
-    let mut chk: u32 = 1;
-
-    for &value in values {
-        let top = chk >> 25;
-        chk = ((chk & 0x1ffffff) << 5) ^ (value as u32);
-
-        for (i, &gen) in generator.iter().enumerate() {
-            if (top >> i) & 1 == 1 {
-                chk ^= gen;
-            }
-        }
-    }
-
-    chk
 }
 
 #[cfg(test)]
@@ -379,7 +293,7 @@ mod tests {
     fn test_bech32_encoding() {
         // HASH160 → Cosmos 주소 테스트
         let pubkey_hash = hex::decode("751e76e8199196d454941c45d1b3a323f1433bd6").unwrap();
-        let address = encode_bech32("cosmos", &pubkey_hash);
+        let address = encode_bech32("cosmos", None, &pubkey_hash);
 
         // cosmos1... 형식 확인
         assert!(address.starts_with("cosmos1"));

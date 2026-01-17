@@ -12,6 +12,8 @@
 pub mod bip39;
 pub mod bip32;
 
+pub mod utils;
+
 pub mod bitcoin;
 pub mod evm;
 pub mod solana;

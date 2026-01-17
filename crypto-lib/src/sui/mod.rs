@@ -19,12 +19,11 @@
 use blake2::{Blake2b, Digest};
 use blake2::digest::consts::U32;
 use ed25519_dalek::{SigningKey, VerifyingKey};
-use hmac::{Hmac, Mac};
-use sha2::Sha512;
 
 use crate::bip39::mnemonic_to_seed;
+use crate::utils::slip10::derive_ed25519_key;
+use crate::utils::bech32::encode_bech32;
 
-type HmacSha512 = Hmac<Sha512>;
 type Blake2b256 = Blake2b<U32>;
 
 /// Sui 계정
@@ -73,7 +72,7 @@ impl SuiAccount {
 
     /// 시드에서 특정 경로로 Sui 계정 생성 (SLIP-10)
     pub fn from_seed_with_path(seed: &[u8], path: &str) -> Result<Self, String> {
-        let private_key = derive_ed25519_private_key(seed, path)?;
+        let private_key = derive_ed25519_key(seed, path)?;
         Ok(Self::from_private_key(private_key))
     }
 
@@ -110,7 +109,7 @@ impl SuiAccount {
         data.extend_from_slice(&self.private_key);
 
         // Bech32 인코딩 (hrp = "suiprivkey")
-        encode_sui_bech32("suiprivkey", &data)
+        encode_bech32("suiprivkey", None, &data)
     }
 }
 
@@ -125,7 +124,7 @@ fn derive_sui_address(public_key: &[u8; 32], scheme: SignatureScheme) -> [u8; 32
     let mut hasher = Blake2b256::new();
 
     // flag + public_key
-    hasher.update(&[scheme as u8]);
+    hasher.update([scheme as u8]);
     hasher.update(public_key);
 
     let result = hasher.finalize();
@@ -133,176 +132,6 @@ fn derive_sui_address(public_key: &[u8; 32], scheme: SignatureScheme) -> [u8; 32
     address.copy_from_slice(&result);
 
     address
-}
-
-// ═══════════════════════════════════════════════════════════════
-// SLIP-10 Ed25519 (Solana와 동일)
-// ═══════════════════════════════════════════════════════════════
-
-fn slip10_master_key(seed: &[u8]) -> Result<([u8; 32], [u8; 32]), String> {
-    let mut hmac = HmacSha512::new_from_slice(b"ed25519 seed")
-        .map_err(|e| format!("HMAC 초기화 실패: {}", e))?;
-
-    hmac.update(seed);
-    let result = hmac.finalize().into_bytes();
-
-    let mut private_key = [0u8; 32];
-    let mut chain_code = [0u8; 32];
-
-    private_key.copy_from_slice(&result[..32]);
-    chain_code.copy_from_slice(&result[32..]);
-
-    Ok((private_key, chain_code))
-}
-
-fn slip10_derive_child(
-    parent_key: &[u8; 32],
-    parent_chain_code: &[u8; 32],
-    index: u32,
-) -> Result<([u8; 32], [u8; 32]), String> {
-    let hardened_index = index | 0x80000000;
-
-    let mut data = Vec::with_capacity(37);
-    data.push(0x00);
-    data.extend_from_slice(parent_key);
-    data.extend_from_slice(&hardened_index.to_be_bytes());
-
-    let mut hmac = HmacSha512::new_from_slice(parent_chain_code)
-        .map_err(|e| format!("HMAC 초기화 실패: {}", e))?;
-
-    hmac.update(&data);
-    let result = hmac.finalize().into_bytes();
-
-    let mut child_key = [0u8; 32];
-    let mut child_chain_code = [0u8; 32];
-
-    child_key.copy_from_slice(&result[..32]);
-    child_chain_code.copy_from_slice(&result[32..]);
-
-    Ok((child_key, child_chain_code))
-}
-
-fn derive_ed25519_private_key(seed: &[u8], path: &str) -> Result<[u8; 32], String> {
-    let indices = parse_slip10_path(path)?;
-    let (mut key, mut chain_code) = slip10_master_key(seed)?;
-
-    for index in indices {
-        let (new_key, new_chain_code) = slip10_derive_child(&key, &chain_code, index)?;
-        key = new_key;
-        chain_code = new_chain_code;
-    }
-
-    Ok(key)
-}
-
-fn parse_slip10_path(path: &str) -> Result<Vec<u32>, String> {
-    let path = path.trim();
-
-    if !path.starts_with('m') && !path.starts_with('M') {
-        return Err("경로는 'm'으로 시작해야 합니다".to_string());
-    }
-
-    let parts: Vec<&str> = path.split('/').collect();
-    let mut indices = Vec::new();
-
-    for part in parts.iter().skip(1) {
-        if part.is_empty() {
-            continue;
-        }
-
-        let num_str = part
-            .trim_end_matches('\'')
-            .trim_end_matches('h')
-            .trim_end_matches('H');
-
-        let num: u32 = num_str
-            .parse()
-            .map_err(|_| format!("유효하지 않은 인덱스: {}", part))?;
-
-        indices.push(num);
-    }
-
-    Ok(indices)
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Bech32 인코딩 (Sui 개인키용)
-// ═══════════════════════════════════════════════════════════════
-
-fn encode_sui_bech32(hrp: &str, data: &[u8]) -> String {
-    let converted = convert_bits(data, 8, 5, true);
-    let checksum = bech32_checksum(hrp, &converted);
-
-    let mut bits = converted;
-    bits.extend(checksum);
-
-    let charset = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
-    let encoded: String = bits
-        .iter()
-        .map(|&b| charset.chars().nth(b as usize).unwrap())
-        .collect();
-
-    format!("{}1{}", hrp, encoded)
-}
-
-fn convert_bits(data: &[u8], from_bits: u32, to_bits: u32, pad: bool) -> Vec<u8> {
-    let mut acc: u32 = 0;
-    let mut bits: u32 = 0;
-    let mut result = Vec::new();
-    let max_v = (1u32 << to_bits) - 1;
-
-    for &value in data {
-        acc = (acc << from_bits) | (value as u32);
-        bits += from_bits;
-
-        while bits >= to_bits {
-            bits -= to_bits;
-            result.push(((acc >> bits) & max_v) as u8);
-        }
-    }
-
-    if pad && bits > 0 {
-        result.push(((acc << (to_bits - bits)) & max_v) as u8);
-    }
-
-    result
-}
-
-fn bech32_checksum(hrp: &str, data: &[u8]) -> Vec<u8> {
-    let mut values = bech32_hrp_expand(hrp);
-    values.extend(data);
-    values.extend(vec![0u8; 6]);
-
-    let polymod = bech32_polymod(&values) ^ 1;
-
-    (0..6)
-        .map(|i| ((polymod >> (5 * (5 - i))) & 31) as u8)
-        .collect()
-}
-
-fn bech32_hrp_expand(hrp: &str) -> Vec<u8> {
-    let mut result: Vec<u8> = hrp.chars().map(|c| (c as u8) >> 5).collect();
-    result.push(0);
-    result.extend(hrp.chars().map(|c| (c as u8) & 31));
-    result
-}
-
-fn bech32_polymod(values: &[u8]) -> u32 {
-    let generator = [0x3b6a57b2u32, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
-    let mut chk: u32 = 1;
-
-    for &value in values {
-        let top = chk >> 25;
-        chk = ((chk & 0x1ffffff) << 5) ^ (value as u32);
-
-        for (i, &gen) in generator.iter().enumerate() {
-            if (top >> i) & 1 == 1 {
-                chk ^= gen;
-            }
-        }
-    }
-
-    chk
 }
 
 #[cfg(test)]
