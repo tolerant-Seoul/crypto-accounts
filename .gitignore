@@ -1,0 +1,29 @@
+# Rust
+/target/
+Cargo.lock
+**/*.rs.bk
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Claude Code - 개인 설정 (커밋 X)
+.claude/settings.local.json
+.claude/settings.json
+.claude/projects/
+.claude/cache/
+
+# Claude Code - 팀 공유 (커밋 O)
+# .claude/commands/  ← 올림
+# .claude/skills/    ← 올림
+
+# 민감 파일
+.env
+.env.*
+*.pem
+*.key
+*secret*
+credentials.json
